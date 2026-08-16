@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import PlainTextResponse
@@ -14,6 +15,7 @@ from app.services.media_ingestion import MediaIngestionService
 from app.services.storage import get_storage_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/instagram")
@@ -41,6 +43,7 @@ async def receive_instagram_webhook(
         verify_meta_signature(raw_body, signature, settings.instagram_app_secret)
 
     payload = json.loads(raw_body.decode("utf-8"))
+    logger.info("Instagram webhook payload: %s", json.dumps(payload))
     storage_service = get_storage_service()
 
     with connection.transaction():

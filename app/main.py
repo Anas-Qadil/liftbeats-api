@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,6 +11,8 @@ from app.api.router import api_router
 from app.api.routes.auth import public_router as auth_public_router
 from app.core.config import get_settings
 from app.db import close_db_pool, open_db_pool
+
+logging.basicConfig(level=logging.INFO)
 
 
 @asynccontextmanager
