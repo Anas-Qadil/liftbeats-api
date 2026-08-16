@@ -10,7 +10,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.db import PoolConnection
-from app.repositories import instagram_accounts, reels
+from app.repositories import instagram_accounts, instagram_link_codes, reels
 from app.services.storage import LocalStorageService, S3StorageService
 from app.services.thumbnail import generate_thumbnail
 
@@ -44,8 +44,15 @@ class MediaIngestionService:
             return 0
 
         sender_id = str((event.get("sender") or {}).get("id") or "")
+        if not sender_id:
+            return 0
+
+        text = (message.get("text") or "").strip()
+        if text and self._try_consume_link_code(sender_id, text):
+            return 0
+
         external_message_id = message.get("mid")
-        if not sender_id or not external_message_id:
+        if not external_message_id:
             return 0
 
         linked_account = instagram_accounts.get_instagram_account_by_instagram_user_id(
@@ -101,6 +108,21 @@ class MediaIngestionService:
         except Exception:  # pragma: no cover - defensive logging around network/media failures
             logger.exception("Failed to ingest Instagram media share.")
             return 0
+
+    def _try_consume_link_code(self, sender_id: str, text: str) -> bool:
+        code = text.upper()
+        link_code = instagram_link_codes.get_active_link_code(self.connection, code)
+        if link_code is None:
+            return False
+
+        instagram_accounts.upsert_instagram_account(
+            self.connection,
+            user_id=str(link_code["user_id"]),
+            instagram_user_id=sender_id,
+            username=None,
+        )
+        instagram_link_codes.delete_link_code(self.connection, code)
+        return True
 
     def _extract_media_info(self, message: dict) -> dict[str, str | None] | None:
         for attachment in message.get("attachments", []):

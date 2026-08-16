@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime
 from typing import Any
 
 from app.db import PoolConnection
@@ -13,9 +11,6 @@ INSTAGRAM_ACCOUNT_FIELDS = """
     user_id,
     instagram_user_id,
     username,
-    access_token_encrypted,
-    token_expires_at,
-    granted_scopes,
     created_at
 """
 
@@ -54,9 +49,6 @@ def upsert_instagram_account(
     user_id: str,
     instagram_user_id: str,
     username: str | None,
-    access_token_encrypted: str,
-    token_expires_at: datetime | None,
-    granted_scopes: list[str],
 ) -> dict[str, Any]:
     with connection.cursor() as cursor:
         cursor.execute(
@@ -64,28 +56,15 @@ def upsert_instagram_account(
             INSERT INTO {SCHEMA}.instagram_accounts (
                 user_id,
                 instagram_user_id,
-                username,
-                access_token_encrypted,
-                token_expires_at,
-                granted_scopes
+                username
             )
-            VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+            VALUES (%s, %s, %s)
             ON CONFLICT (user_id) DO UPDATE
             SET
                 instagram_user_id = EXCLUDED.instagram_user_id,
-                username = EXCLUDED.username,
-                access_token_encrypted = EXCLUDED.access_token_encrypted,
-                token_expires_at = EXCLUDED.token_expires_at,
-                granted_scopes = EXCLUDED.granted_scopes
+                username = EXCLUDED.username
             RETURNING {INSTAGRAM_ACCOUNT_FIELDS}
             """,
-            (
-                user_id,
-                instagram_user_id,
-                username,
-                access_token_encrypted,
-                token_expires_at,
-                json.dumps(granted_scopes),
-            ),
+            (user_id, instagram_user_id, username),
         )
         return cursor.fetchone()

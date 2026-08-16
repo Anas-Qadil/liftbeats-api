@@ -19,9 +19,6 @@ CREATE TABLE IF NOT EXISTS liftbeats.instagram_accounts (
     user_id UUID NOT NULL UNIQUE REFERENCES liftbeats.users (id) ON DELETE CASCADE,
     instagram_user_id TEXT NOT NULL UNIQUE,
     username TEXT,
-    access_token_encrypted TEXT NOT NULL,
-    token_expires_at TIMESTAMPTZ,
-    granted_scopes JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -30,6 +27,18 @@ CREATE INDEX IF NOT EXISTS idx_instagram_accounts_user_id
 
 CREATE INDEX IF NOT EXISTS idx_instagram_accounts_instagram_user_id
     ON liftbeats.instagram_accounts (instagram_user_id);
+
+-- One-time codes a user sends by DM to prove a given Instagram sender_id
+-- (of any account type) belongs to them, without going through Meta OAuth.
+CREATE TABLE IF NOT EXISTS liftbeats.instagram_link_codes (
+    code TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES liftbeats.users (id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_instagram_link_codes_user_id
+    ON liftbeats.instagram_link_codes (user_id);
 
 CREATE TABLE IF NOT EXISTS liftbeats.folders (
     id BIGSERIAL PRIMARY KEY,

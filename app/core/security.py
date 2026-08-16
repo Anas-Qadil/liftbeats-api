@@ -53,16 +53,6 @@ def decode_access_token(token: str) -> TokenPayload:
     return payload
 
 
-def create_state_token(subject: str, *, expires_in_minutes: int = 15) -> str:
-    expires_at = datetime.now(UTC) + timedelta(minutes=expires_in_minutes)
-    payload = {
-        "sub": subject,
-        "type": "instagram_link_state",
-        "exp": expires_at,
-    }
-    return _encode(payload)
-
-
 def create_google_oauth_state_token(redirect_uri: str) -> str:
     settings = get_settings()
     expires_at = datetime.now(UTC) + timedelta(minutes=settings.state_token_expire_minutes)
@@ -72,16 +62,6 @@ def create_google_oauth_state_token(redirect_uri: str) -> str:
         "exp": expires_at,
     }
     return _encode(payload)
-
-
-def decode_state_token(token: str) -> str:
-    payload = TokenPayload.model_validate(_decode(token))
-    if payload.type != "instagram_link_state":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid Instagram link state.",
-        )
-    return payload.sub
 
 
 def decode_google_oauth_state_token(token: str) -> dict[str, Any]:

@@ -40,25 +40,10 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 10080
     state_token_expire_minutes: int = 10
 
-    app_encryption_key: str = "MrMLVEFLz1B85LxUSOIwmIVDgmK64IgR9ERbPP871-A="
-
     allowed_origins: list[str] = Field(default_factory=list)
 
-    instagram_app_id: str = Field(default="", validation_alias="META_APP_ID")
     instagram_app_secret: str = Field(default="", validation_alias="META_APP_SECRET")
-    instagram_redirect_uri: str = "https://liftbeats.adintels.com/api/v1/instagram/link/callback"
-    instagram_authorize_url: str = "https://www.instagram.com/oauth/authorize"
-    instagram_token_url: str = "https://api.instagram.com/oauth/access_token"
-    instagram_graph_base_url: str = "https://graph.instagram.com"
-    instagram_api_version: str = "v25.0"
-    instagram_scopes: list[str] = Field(
-        default_factory=lambda: [
-            "instagram_business_basic",
-            "instagram_business_manage_messages",
-        ]
-    )
-    instagram_link_success_url: str = "liftbeats://instagram-link/success"
-    instagram_link_failure_url: str = "liftbeats://instagram-link/failure"
+    instagram_business_username: str = "lift.beats"
     meta_webhook_verify_token: str = "change-me"
 
     storage_backend: Literal["local", "s3"] = "local"
@@ -73,7 +58,7 @@ class Settings(BaseSettings):
 
     request_timeout_seconds: int = 30
 
-    @field_validator("allowed_origins", "instagram_scopes", mode="before")
+    @field_validator("allowed_origins", mode="before")
     @classmethod
     def parse_csv_or_json_list(cls, value: object) -> object:
         if isinstance(value, list):
@@ -92,10 +77,6 @@ class Settings(BaseSettings):
         if not self.session_secret:
             self.session_secret = self.google_client_secret or "change-me-in-production"
         self.app_base_url = self.app_base_url.rstrip("/")
-        if not self.instagram_redirect_uri:
-            self.instagram_redirect_uri = (
-                f"{self.app_base_url}{self.api_v1_prefix}/instagram/link/callback"
-            )
         return self
 
     @property
