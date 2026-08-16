@@ -5,7 +5,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
+from fastapi.responses import Response
 
 from app.api.deps import get_current_user, get_db_connection
 from app.core.config import get_settings
@@ -61,3 +62,12 @@ def instagram_link_status(
         linked=True,
         account=InstagramAccountRead.model_validate(account),
     )
+
+
+@router.delete("/link", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+def unlink_instagram_account(
+    connection: PoolConnection = Depends(get_db_connection),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> Response:
+    instagram_accounts.delete_instagram_account(connection, user_id=str(current_user["id"]))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

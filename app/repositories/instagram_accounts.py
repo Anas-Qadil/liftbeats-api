@@ -43,6 +43,15 @@ def get_instagram_account_by_instagram_user_id(
         return cursor.fetchone()
 
 
+def delete_instagram_account(connection: PoolConnection, *, user_id: str) -> bool:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"DELETE FROM {SCHEMA}.instagram_accounts WHERE user_id = %s",
+            (user_id,),
+        )
+        return cursor.rowcount > 0
+
+
 def upsert_instagram_account(
     connection: PoolConnection,
     *,
