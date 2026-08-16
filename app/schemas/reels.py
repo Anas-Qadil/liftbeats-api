@@ -13,7 +13,7 @@ class ReelRead(BaseModel):
     user_id: UUID
     folder_id: int | None
     source_url: str | None
-    local_video_path: str
+    local_video_path: str | None
     thumbnail_path: str | None
     caption: str | None
     platform: str | None

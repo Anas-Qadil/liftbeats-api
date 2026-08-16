@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
-import mimetypes
 import tempfile
 from pathlib import Path
-from urllib.parse import urlparse
 
 import httpx
+import yt_dlp
 
 from app.core.config import get_settings
 from app.db import PoolConnection
@@ -74,40 +73,43 @@ class MediaIngestionService:
         if media_info is None:
             return 0
 
+        video_url = None
+        thumbnail_url = None
         try:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 tmp_path = Path(tmp_dir)
-                downloaded_video = self._download_media(media_info["download_url"], tmp_path)
+                downloaded_video, cover_thumbnail = self._download_media(media_info["source_url"], tmp_path)
                 video_url = self.storage_service.store_file(
                     downloaded_video,
                     user_id=str(linked_account["user_id"]),
                     kind="reels",
                 )
 
-                thumbnail_url = None
-                thumbnail_path = generate_thumbnail(downloaded_video, tmp_path)
+                thumbnail_path = cover_thumbnail or generate_thumbnail(downloaded_video, tmp_path)
                 if thumbnail_path is not None:
                     thumbnail_url = self.storage_service.store_file(
                         thumbnail_path,
                         user_id=str(linked_account["user_id"]),
                         kind="thumbnails",
                     )
-
-            reels.create_reel(
-                self.connection,
-                user_id=str(linked_account["user_id"]),
-                folder_id=None,
-                source_url=media_info["source_url"],
-                local_video_path=video_url,
-                thumbnail_path=thumbnail_url,
-                caption=message.get("text") or media_info.get("caption"),
-                platform="instagram",
-                external_message_id=external_message_id,
-            )
-            return 1
         except Exception:  # pragma: no cover - defensive logging around network/media failures
-            logger.exception("Failed to ingest Instagram media share.")
-            return 0
+            # Still save the reel with just its source_url — a retry pass
+            # can pick up any row with local_video_path IS NULL later,
+            # rather than losing track of the share entirely.
+            logger.exception("Failed to download Instagram media; saving source_url for retry.")
+
+        reels.create_reel(
+            self.connection,
+            user_id=str(linked_account["user_id"]),
+            folder_id=None,
+            source_url=media_info["source_url"],
+            local_video_path=video_url,
+            thumbnail_path=thumbnail_url,
+            caption=message.get("text") or media_info.get("caption"),
+            platform="instagram",
+            external_message_id=external_message_id,
+        )
+        return 1
 
     def _try_consume_link_code(self, sender_id: str, text: str) -> bool:
         code = text.upper()
@@ -131,63 +133,47 @@ class MediaIngestionService:
                 continue
 
             payload = attachment.get("payload") or {}
-            url_candidates = self._collect_urls(payload)
-            if not url_candidates:
+            source_url = payload.get("url")
+            if not source_url:
                 continue
 
-            download_url = self._pick_download_url(url_candidates)
-            source_url = payload.get("url") or url_candidates[0]
-            caption = attachment.get("title")
-
             return {
-                "download_url": download_url,
                 "source_url": source_url,
-                "caption": caption,
+                "caption": attachment.get("title"),
             }
 
         return None
 
-    def _collect_urls(self, value: object) -> list[str]:
-        if isinstance(value, str) and value.startswith(("http://", "https://")):
-            return [value]
-        if isinstance(value, dict):
-            urls: list[str] = []
-            for child in value.values():
-                urls.extend(self._collect_urls(child))
-            return urls
-        if isinstance(value, list):
-            urls: list[str] = []
-            for child in value:
-                urls.extend(self._collect_urls(child))
-            return urls
-        return []
+    def _download_media(self, url: str, output_dir: Path) -> tuple[Path, Path | None]:
+        # Meta's messaging webhook only ever gives us the post's permalink,
+        # not a direct video file (confirmed by inspecting a real payload —
+        # downloading that URL directly returns the Instagram webpage, not
+        # a video). yt-dlp resolves the permalink to the actual asset, and
+        # also gives us Instagram's own cover image (info["thumbnail"]) —
+        # far more representative than a frame we'd grab ourselves, which
+        # tends to land on a black intro/title card.
+        outtmpl = str(output_dir / "reel.%(ext)s")
+        ydl_opts = {
+            "outtmpl": outtmpl,
+            "quiet": True,
+            "no_warnings": True,
+            "noprogress": True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            video_path = Path(ydl.prepare_filename(info))
 
-    def _pick_download_url(self, urls: list[str]) -> str:
-        for candidate in urls:
-            lower = candidate.lower()
-            if any(lower.endswith(extension) for extension in (".mp4", ".mov", ".m4v", ".webm")):
-                return candidate
-        return urls[0]
+        thumbnail_path = None
+        thumbnail_url = info.get("thumbnail")
+        if thumbnail_url:
+            try:
+                with httpx.Client(timeout=self.settings.request_timeout_seconds) as client:
+                    response = client.get(thumbnail_url)
+                    response.raise_for_status()
+                thumbnail_path = output_dir / "cover.jpg"
+                thumbnail_path.write_bytes(response.content)
+            except Exception:
+                logger.exception("Failed to download Instagram's cover image; falling back to a captured frame.")
+                thumbnail_path = None
 
-    def _download_media(self, url: str, output_dir: Path) -> Path:
-        with httpx.Client(timeout=self.settings.request_timeout_seconds, follow_redirects=True) as client:
-            response = client.get(url)
-            response.raise_for_status()
-
-        suffix = self._infer_file_suffix(url, response.headers.get("content-type"))
-        destination = output_dir / f"downloaded_reel{suffix}"
-        destination.write_bytes(response.content)
-        return destination
-
-    def _infer_file_suffix(self, url: str, content_type: str | None) -> str:
-        if content_type:
-            guessed = mimetypes.guess_extension(content_type.split(";")[0].strip())
-            if guessed:
-                return guessed
-
-        parsed = urlparse(url)
-        path = Path(parsed.path)
-        if path.suffix:
-            return path.suffix
-
-        return ".mp4"
+        return video_path, thumbnail_path

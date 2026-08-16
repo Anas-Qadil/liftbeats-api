@@ -27,6 +27,10 @@ ENV ENVIRONMENT=production
 ENV DEBUG=false
 ENV PORT=8000
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /opt/venv /opt/venv
 COPY app ./app
 COPY schema.sql ./schema.sql

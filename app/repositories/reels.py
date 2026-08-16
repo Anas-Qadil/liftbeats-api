@@ -86,7 +86,7 @@ def create_reel(
     user_id: str,
     folder_id: int | None,
     source_url: str | None,
-    local_video_path: str,
+    local_video_path: str | None,
     thumbnail_path: str | None,
     caption: str | None,
     platform: str | None,
@@ -120,6 +120,39 @@ def create_reel(
             ),
         )
         return cursor.fetchone()
+
+
+def set_reel_media(
+    connection: PoolConnection,
+    *,
+    reel_id: int,
+    local_video_path: str,
+    thumbnail_path: str | None,
+) -> dict[str, Any] | None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            UPDATE {SCHEMA}.reels
+            SET local_video_path = %s, thumbnail_path = %s
+            WHERE id = %s
+            RETURNING {REEL_FIELDS}
+            """,
+            (local_video_path, thumbnail_path, reel_id),
+        )
+        return cursor.fetchone()
+
+
+def list_reels_missing_video(connection: PoolConnection) -> list[dict[str, Any]]:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT {REEL_FIELDS}
+            FROM {SCHEMA}.reels
+            WHERE local_video_path IS NULL AND source_url IS NOT NULL
+            ORDER BY created_at
+            """
+        )
+        return cursor.fetchall()
 
 
 def move_reel(

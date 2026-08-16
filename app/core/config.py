@@ -49,12 +49,12 @@ class Settings(BaseSettings):
     storage_backend: Literal["local", "s3"] = "local"
     local_media_root: str = "media"
     local_media_base_url: str = "/media"
-    s3_bucket: str = ""
-    s3_region: str = ""
-    s3_endpoint_url: str | None = None
-    s3_access_key_id: str = ""
-    s3_secret_access_key: str = ""
-    s3_public_base_url: str = ""
+    s3_bucket: str = Field(default="", validation_alias="R2_BUCKET_NAME")
+    s3_region: str = Field(default="auto", validation_alias="R2_REGION")
+    s3_endpoint_url: str | None = Field(default=None, validation_alias="R2_ENDPOINT")
+    s3_access_key_id: str = Field(default="", validation_alias="R2_ACCESS_KEY")
+    s3_secret_access_key: str = Field(default="", validation_alias="R2_SECRET_ACCESS_KEY")
+    s3_public_base_url: str = Field(default="", validation_alias="S3_PUBLIC_BASE_URL")
 
     request_timeout_seconds: int = 30
 

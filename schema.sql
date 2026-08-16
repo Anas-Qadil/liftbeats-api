@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS liftbeats.reels (
     user_id UUID NOT NULL REFERENCES liftbeats.users (id) ON DELETE CASCADE,
     folder_id BIGINT REFERENCES liftbeats.folders (id) ON DELETE SET NULL,
     source_url TEXT,
-    local_video_path TEXT NOT NULL,
+    local_video_path TEXT,
     thumbnail_path TEXT,
     caption TEXT,
     platform VARCHAR(50),
