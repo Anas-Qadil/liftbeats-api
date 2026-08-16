@@ -1,0 +1,14 @@
+services:
+  liftbeats-api:
+    image: ${DOCKER_IMAGE:-liftbeats-api:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: liftbeats-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./media:/app/media
