@@ -80,6 +80,24 @@ def get_reel_by_external_message_id(
         return cursor.fetchone()
 
 
+def get_reel_by_source_url(
+    connection: PoolConnection,
+    *,
+    user_id: str,
+    source_url: str,
+) -> dict[str, Any] | None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT {REEL_FIELDS}
+            FROM {SCHEMA}.reels
+            WHERE user_id = %s AND source_url = %s
+            """,
+            (user_id, source_url),
+        )
+        return cursor.fetchone()
+
+
 def create_reel(
     connection: PoolConnection,
     *,

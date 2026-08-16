@@ -73,6 +73,17 @@ class MediaIngestionService:
         if media_info is None:
             return 0
 
+        # Dedup by the reel itself, not just the DM message id — the same
+        # reel shared in two separate messages (different external_message_id
+        # each time) shouldn't create two rows.
+        existing_by_source = reels.get_reel_by_source_url(
+            self.connection,
+            user_id=str(linked_account["user_id"]),
+            source_url=media_info["source_url"],
+        )
+        if existing_by_source is not None:
+            return 0
+
         video_url = None
         thumbnail_url = None
         try:
