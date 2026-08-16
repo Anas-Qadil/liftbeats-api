@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import RedirectResponse
 
 from typing import Any
 
@@ -19,6 +20,11 @@ from app.schemas.auth import (
 from app.services.google_auth import GoogleAuthService
 
 router = APIRouter()
+
+# Mounted at the app root (see app/main.py) rather than under API_V1_PREFIX,
+# since its path has to match the `redirect_uri` we register with Google
+# exactly: https://liftbeats.adintels.com/auth/callback.
+public_router = APIRouter()
 
 
 @router.get("/google/login", response_model=GoogleLoginResponse)
@@ -91,3 +97,21 @@ def get_me(
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> UserRead:
     return UserRead.model_validate(current_user)
+
+
+@public_router.get("/auth/callback", response_model=None, include_in_schema=False)
+def google_oauth_mobile_callback(request: Request) -> RedirectResponse:
+    """Google's registered redirect URI has to be `https`, but the mobile
+    app is actually listening for `GOOGLE_MOBILE_CALLBACK_URL` (a custom
+    scheme — see AuthRepository.signInWithGoogle in the Flutter app). This
+    route's only job is bouncing whatever query string Google sends
+    (`code`+`state` on success, `error`(+`error_description`)+`state` if
+    the user denies consent) onto that scheme, unchanged, so the app can
+    catch it. No state validation or DB access here — that all happens in
+    POST /google/exchange once the app calls it with the code it receives.
+    """
+    settings = get_settings()
+    target = settings.google_mobile_callback_url
+    if request.url.query:
+        target = f"{target}?{request.url.query}"
+    return RedirectResponse(url=target, status_code=status.HTTP_302_FOUND)

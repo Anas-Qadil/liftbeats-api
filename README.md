@@ -88,7 +88,7 @@ docker compose up --build
 
 That Compose file:
 
-- builds the API from the parent project
+- pulls `segfault13/liftbeats-api:latest` from Docker Hub
 - loads env vars from `deployement/.env`
 - mounts `../media` into the API container
 - starts Nginx in front of the API on port `80`

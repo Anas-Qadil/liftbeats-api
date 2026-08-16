@@ -31,6 +31,10 @@ class Settings(BaseSettings):
 
     google_client_id: str = Field(default="", validation_alias="CLIENT_ID")
     google_client_secret: str = Field(default="", validation_alias="CLIENT_SECRET")
+    google_mobile_callback_url: str = Field(
+        default="liftbeats://auth/callback",
+        validation_alias="GOOGLE_MOBILE_CALLBACK_URL",
+    )
     session_secret: str | None = Field(default=None, validation_alias="SESSION_SECRET")
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 10080

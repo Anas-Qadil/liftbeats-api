@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
+from app.api.routes.auth import public_router as auth_public_router
 from app.core.config import get_settings
 from app.db import close_db_pool, open_db_pool
 
@@ -40,6 +41,9 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+    # No prefix: has to match Google's registered redirect URI exactly
+    # (https://liftbeats.adintels.com/auth/callback), not /api/v1/auth/callback.
+    app.include_router(auth_public_router)
     return app
 
 

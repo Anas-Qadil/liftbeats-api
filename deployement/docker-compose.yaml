@@ -1,9 +1,7 @@
 services:
   liftbeats-api:
     image: segfault13/liftbeats-api:latest
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    pull_policy: always
     container_name: liftbeats-api
     restart: unless-stopped
     env_file:
@@ -15,6 +13,7 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
+    pull_policy: always
     container_name: liftbeats-nginx
     restart: unless-stopped
     depends_on:
