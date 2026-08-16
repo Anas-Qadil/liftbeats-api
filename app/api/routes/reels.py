@@ -65,6 +65,38 @@ def move_user_reel(
     return ReelRead.model_validate(record)
 
 
+@router.delete("/by-source-url", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user_reel_by_source_url(
+    source_url: str = Query(...),
+    connection: PoolConnection = Depends(get_db_connection),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> Response:
+    # Registered before /{reel_id} — the client only knows a reel by its
+    # source_url (the app's local id is device-local and unrelated to the
+    # server's), so deleting needs to key off that instead.
+    reel = reels.get_reel_by_source_url(
+        connection,
+        user_id=str(current_user["id"]),
+        source_url=source_url,
+    )
+    if reel is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reel not found.")
+
+    storage_service = get_storage_service()
+    with connection.transaction():
+        deleted = reels.delete_reel(
+            connection,
+            user_id=str(current_user["id"]),
+            reel_id=reel["id"],
+        )
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reel not found.")
+
+    storage_service.delete_file(reel.get("local_video_path"))
+    storage_service.delete_file(reel.get("thumbnail_path"))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.delete("/{reel_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user_reel(
     reel_id: int,
