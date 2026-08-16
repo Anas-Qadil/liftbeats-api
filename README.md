@@ -52,6 +52,52 @@ docker compose up --build
 
 The compose file mounts `./media` into the container so locally stored reels/thumbnails survive container restarts.
 
+## Nginx
+
+A ready-to-mount Nginx config lives at [nginx/default.conf](/Users/anasqadil/liftbeats-api/nginx/default.conf).
+
+It is set up for:
+
+- `server_name liftbeats.adintels.com`
+- proxying to the Compose service `liftbeats-api:8000`
+
+Typical Compose mount:
+
+```yaml
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - liftbeats-api
+```
+
+## Deployement
+
+There is now a self-contained deploy folder at [`deployement/`](/Users/anasqadil/liftbeats-api/deployement) using the exact name requested.
+
+From there you can run:
+
+```bash
+cd deployement
+docker compose up --build
+```
+
+That Compose file:
+
+- builds the API from the parent project
+- loads env vars from `deployement/.env`
+- mounts `../media` into the API container
+- starts Nginx in front of the API on port `80`
+- uses the Nginx config at [`deployement/nginx.conf`](/Users/anasqadil/liftbeats-api/deployement/nginx.conf)
+
+Put your deployment env file here:
+
+- [`deployement/.env`](/Users/anasqadil/liftbeats-api/deployement)
+
 ## Database
 
 Every table and column is `snake_case`. The schema mirrors the mobile app's folders/reels data model and adds multi-user ownership plus Instagram account linkage.

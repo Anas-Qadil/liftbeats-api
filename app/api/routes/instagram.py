@@ -63,7 +63,7 @@ def instagram_link_status(
     )
 
 
-@router.get("/link/callback")
+@router.get("/link/callback", response_model=None)
 def instagram_link_callback(
     code: str | None = Query(default=None),
     state_token: str | None = Query(default=None, alias="state"),
