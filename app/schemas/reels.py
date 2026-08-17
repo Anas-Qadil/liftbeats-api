@@ -18,6 +18,7 @@ class ReelRead(BaseModel):
     caption: str | None
     platform: str | None
     external_message_id: str | None
+    synced_at: datetime
     created_at: datetime
 
 

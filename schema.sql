@@ -77,6 +77,11 @@ CREATE TABLE IF NOT EXISTS liftbeats.reels (
     caption TEXT,
     platform VARCHAR(50),
     external_message_id TEXT,
+    -- Bumped whenever local_video_path's target file actually changes (see
+    -- set_reel_media) — clients cache the video locally and compare this
+    -- to decide whether to re-download rather than trusting local_video_path
+    -- alone, which never changes.
+    synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

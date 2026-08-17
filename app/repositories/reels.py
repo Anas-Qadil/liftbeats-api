@@ -16,6 +16,7 @@ REEL_FIELDS = """
     caption,
     platform,
     external_message_id,
+    synced_at,
     created_at
 """
 
@@ -147,11 +148,15 @@ def set_reel_media(
     local_video_path: str,
     thumbnail_path: str | None,
 ) -> dict[str, Any] | None:
+    # Bumps synced_at too — clients cache the video file locally and use
+    # this column to detect when their copy is stale (see the Flutter
+    # app's ReelSyncService), so any update to the video itself needs to
+    # invalidate that cache.
     with connection.cursor() as cursor:
         cursor.execute(
             f"""
             UPDATE {SCHEMA}.reels
-            SET local_video_path = %s, thumbnail_path = %s
+            SET local_video_path = %s, thumbnail_path = %s, synced_at = NOW()
             WHERE id = %s
             RETURNING {REEL_FIELDS}
             """,
