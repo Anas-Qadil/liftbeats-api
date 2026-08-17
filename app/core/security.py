@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -41,6 +44,33 @@ def create_access_token(subject: str) -> str:
         "exp": expires_at,
     }
     return _encode(payload)
+
+
+@dataclass(slots=True)
+class NewRefreshToken:
+    raw_token: str
+    token_hash: str
+    expires_at: datetime
+
+
+def generate_refresh_token() -> NewRefreshToken:
+    """Opaque, DB-backed refresh token — not a JWT, deliberately, so a
+    single row can be revoked (logout, rotation on reuse) without needing a
+    server-side blocklist for otherwise-stateless tokens. Only the hash is
+    ever persisted (see refresh_tokens repository); the raw value is
+    returned to the caller exactly once, to hand to the client.
+    """
+    settings = get_settings()
+    raw_token = secrets.token_urlsafe(32)
+    return NewRefreshToken(
+        raw_token=raw_token,
+        token_hash=hash_refresh_token(raw_token),
+        expires_at=datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days),
+    )
+
+
+def hash_refresh_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
 def decode_access_token(token: str) -> TokenPayload:

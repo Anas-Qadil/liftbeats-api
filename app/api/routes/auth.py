@@ -14,12 +14,19 @@ from typing import Any
 
 from app.api.deps import get_current_user, get_db_connection
 from app.core.config import get_settings
-from app.core.security import create_access_token, create_google_oauth_state_token, decode_google_oauth_state_token
+from app.core.security import (
+    create_access_token,
+    create_google_oauth_state_token,
+    decode_google_oauth_state_token,
+    generate_refresh_token,
+    hash_refresh_token,
+)
 from app.db import PoolConnection
-from app.repositories import users
+from app.repositories import refresh_tokens, users
 from app.schemas.auth import (
     GoogleCodeExchangeRequest,
     GoogleLoginResponse,
+    RefreshTokenRequest,
     TokenResponse,
     UserRead,
 )
@@ -117,9 +124,61 @@ def exchange_google_code(
                 name=google_identity.name,
             )
 
-    access_token = create_access_token(str(user["id"]))
+    with connection.transaction():
+        return _issue_tokens(connection, user)
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh_access_token(
+    payload: RefreshTokenRequest,
+    connection: PoolConnection = Depends(get_db_connection),
+) -> TokenResponse:
+    token_hash = hash_refresh_token(payload.refresh_token)
+
+    with connection.transaction():
+        stored = refresh_tokens.get_active_refresh_token(connection, token_hash)
+        if stored is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token is invalid, expired, or already used.",
+            )
+
+        user = users.get_user_by_id(connection, str(stored["user_id"]))
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User no longer exists.")
+
+        # Rotate: this token is single-use. Revoking it here means a stolen
+        # refresh token can only be replayed once — the legitimate client's
+        # next refresh attempt with the same (now-revoked) token fails loudly
+        # instead of two parties silently sharing one session indefinitely.
+        refresh_tokens.revoke_refresh_token(connection, token_hash)
+        return _issue_tokens(connection, user)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    payload: RefreshTokenRequest,
+    connection: PoolConnection = Depends(get_db_connection),
+) -> None:
+    """Revokes the given refresh token server-side, so "Disconnect" in the
+    app actually ends the session rather than just discarding the token
+    on-device while it remains usable until it expires on its own.
+    """
+    with connection.transaction():
+        refresh_tokens.revoke_refresh_token(connection, hash_refresh_token(payload.refresh_token))
+
+
+def _issue_tokens(connection: PoolConnection, user: dict[str, Any]) -> TokenResponse:
+    new_refresh_token = generate_refresh_token()
+    refresh_tokens.create_refresh_token(
+        connection,
+        user_id=str(user["id"]),
+        token_hash=new_refresh_token.token_hash,
+        expires_at=new_refresh_token.expires_at,
+    )
     return TokenResponse(
-        access_token=access_token,
+        access_token=create_access_token(str(user["id"])),
+        refresh_token=new_refresh_token.raw_token,
         expires_in=get_settings().jwt_access_token_expire_minutes * 60,
         user=UserRead.model_validate(user),
     )

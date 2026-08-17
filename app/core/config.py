@@ -37,7 +37,13 @@ class Settings(BaseSettings):
     )
     session_secret: str | None = Field(default=None, validation_alias="SESSION_SECRET")
     jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 10080
+    # Short-lived on purpose now that refresh tokens exist (see
+    # app/repositories/refresh_tokens.py) — the app silently exchanges an
+    # expired access token for a new one via POST /auth/refresh instead of
+    # forcing a full Google re-login, so there's no UX cost to keeping this
+    # tight for security.
+    jwt_access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 30
     state_token_expire_minutes: int = 10
 
     allowed_origins: list[str] = Field(default_factory=list)

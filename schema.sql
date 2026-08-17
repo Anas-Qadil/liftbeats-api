@@ -14,6 +14,23 @@ CREATE TABLE IF NOT EXISTS liftbeats.users (
 CREATE INDEX IF NOT EXISTS idx_users_email
     ON liftbeats.users (email);
 
+-- Opaque, DB-backed refresh tokens (see app/core/security.py's
+-- generate_refresh_token) — only the sha256 hash is ever stored, so a DB
+-- leak doesn't hand out usable tokens. Rotated on every use and revocable
+-- (logout, or automatically on reuse-after-rotation), unlike the JWT
+-- access token itself.
+CREATE TABLE IF NOT EXISTS liftbeats.refresh_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES liftbeats.users (id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id
+    ON liftbeats.refresh_tokens (user_id);
+
 CREATE TABLE IF NOT EXISTS liftbeats.instagram_accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL UNIQUE REFERENCES liftbeats.users (id) ON DELETE CASCADE,
