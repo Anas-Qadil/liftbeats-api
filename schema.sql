@@ -77,6 +77,16 @@ CREATE TABLE IF NOT EXISTS liftbeats.reels (
     caption TEXT,
     platform VARCHAR(50),
     external_message_id TEXT,
+    -- Post metadata resolved from the permalink at ingest (see
+    -- media_ingestion.extract_post_metadata). The DM webhook itself carries
+    -- none of this; yt-dlp returns it alongside the video.
+    author_username TEXT,
+    author_name TEXT,
+    posted_at TIMESTAMPTZ,
+    like_count INTEGER,
+    comment_count INTEGER,
+    width INTEGER,
+    height INTEGER,
     -- Bumped whenever local_video_path's target file actually changes (see
     -- set_reel_media) — clients cache the video locally and compare this
     -- to decide whether to re-download rather than trusting local_video_path

@@ -16,9 +16,18 @@ REEL_FIELDS = """
     caption,
     platform,
     external_message_id,
+    author_username,
+    author_name,
+    posted_at,
+    like_count,
+    comment_count,
+    width,
+    height,
     synced_at,
     created_at
 """
+
+METADATA_FIELDS = ("author_username", "author_name", "posted_at", "like_count", "comment_count", "width", "height")
 
 
 def list_reels(
@@ -110,7 +119,9 @@ def create_reel(
     caption: str | None,
     platform: str | None,
     external_message_id: str | None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    meta = metadata or {}
     with connection.cursor() as cursor:
         cursor.execute(
             f"""
@@ -122,9 +133,16 @@ def create_reel(
                 thumbnail_path,
                 caption,
                 platform,
-                external_message_id
+                external_message_id,
+                author_username,
+                author_name,
+                posted_at,
+                like_count,
+                comment_count,
+                width,
+                height
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING {REEL_FIELDS}
             """,
             (
@@ -136,6 +154,7 @@ def create_reel(
                 caption,
                 platform,
                 external_message_id,
+                *(meta.get(field) for field in METADATA_FIELDS),
             ),
         )
         return cursor.fetchone()
@@ -205,3 +224,48 @@ def delete_reel(connection: PoolConnection, *, user_id: str, reel_id: int) -> bo
             (reel_id, user_id),
         )
         return cursor.rowcount > 0
+
+
+def list_reels_missing_metadata(connection: PoolConnection, *, limit: int | None = None) -> list[dict[str, Any]]:
+    """Reels that were saved before post metadata was kept, for the backfill."""
+    query = f"""
+        SELECT {REEL_FIELDS}
+        FROM {SCHEMA}.reels
+        WHERE author_username IS NULL AND source_url IS NOT NULL
+        ORDER BY created_at DESC, id DESC
+    """
+    params: tuple[Any, ...] = ()
+    if limit is not None:
+        query += " LIMIT %s"
+        params = (limit,)
+    with connection.cursor() as cursor:
+        cursor.execute(query, params)
+        return cursor.fetchall()
+
+
+def update_reel_metadata(
+    connection: PoolConnection,
+    *,
+    reel_id: int,
+    metadata: dict[str, Any],
+    caption: str | None = None,
+) -> dict[str, Any] | None:
+    """Writes post metadata on an existing reel; the caption only when the row has none yet."""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            UPDATE {SCHEMA}.reels
+            SET author_username = %s,
+                author_name = %s,
+                posted_at = %s,
+                like_count = %s,
+                comment_count = %s,
+                width = %s,
+                height = %s,
+                caption = COALESCE(caption, %s)
+            WHERE id = %s
+            RETURNING {REEL_FIELDS}
+            """,
+            (*(metadata.get(field) for field in METADATA_FIELDS), caption, reel_id),
+        )
+        return cursor.fetchone()

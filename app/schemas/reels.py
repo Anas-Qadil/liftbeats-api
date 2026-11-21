@@ -18,6 +18,13 @@ class ReelRead(BaseModel):
     caption: str | None
     platform: str | None
     external_message_id: str | None
+    author_username: str | None = None
+    author_name: str | None = None
+    posted_at: datetime | None = None
+    like_count: int | None = None
+    comment_count: int | None = None
+    width: int | None = None
+    height: int | None = None
     synced_at: datetime
     created_at: datetime
 

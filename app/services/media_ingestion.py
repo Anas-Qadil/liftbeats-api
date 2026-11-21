@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import httpx
 import yt_dlp
@@ -16,6 +18,41 @@ from app.services.thumbnail import generate_thumbnail
 logger = logging.getLogger(__name__)
 
 SUPPORTED_ATTACHMENT_TYPES = {"ig_reel", "reel", "video", "share"}
+
+
+def extract_post_metadata(info: dict[str, Any]) -> dict[str, Any]:
+    """What we keep from a yt-dlp info dict: who posted, what they wrote, when, how it did.
+
+    yt-dlp's `title` for Instagram is just "Video by <user>", so the caption
+    is `description`. `channel` is the username; `uploader` the display name.
+    """
+
+    def as_int(value: Any) -> int | None:
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    timestamp = info.get("timestamp")
+    posted_at = datetime.fromtimestamp(timestamp, tz=UTC) if isinstance(timestamp, (int, float)) else None
+    description = (info.get("description") or "").strip() or None
+    return {
+        "author_username": info.get("channel") or info.get("uploader_id") or None,
+        "author_name": info.get("uploader") or None,
+        "posted_at": posted_at,
+        "like_count": as_int(info.get("like_count")),
+        "comment_count": as_int(info.get("comment_count")),
+        "width": as_int(info.get("width")),
+        "height": as_int(info.get("height")),
+        "caption": description,
+    }
+
+
+def fetch_post_metadata(url: str) -> dict[str, Any]:
+    """Metadata only, no download. Used by the backfill."""
+    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "noprogress": True, "skip_download": True}) as ydl:
+        info = ydl.extract_info(url, download=False)
+    return extract_post_metadata(info)
 
 
 class MediaIngestionService:
@@ -86,10 +123,11 @@ class MediaIngestionService:
 
         video_url = None
         thumbnail_url = None
+        metadata: dict[str, Any] = {}
         try:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 tmp_path = Path(tmp_dir)
-                downloaded_video, cover_thumbnail = self._download_media(media_info["source_url"], tmp_path)
+                downloaded_video, cover_thumbnail, metadata = self._download_media(media_info["source_url"], tmp_path)
                 video_url = self.storage_service.store_file(
                     downloaded_video,
                     user_id=str(linked_account["user_id"]),
@@ -116,9 +154,11 @@ class MediaIngestionService:
             source_url=media_info["source_url"],
             local_video_path=video_url,
             thumbnail_path=thumbnail_url,
-            caption=message.get("text") or media_info.get("caption"),
+            # The post's own caption first; the DM text or attachment title only as a fallback.
+            caption=metadata.get("caption") or message.get("text") or media_info.get("caption"),
             platform="instagram",
             external_message_id=external_message_id,
+            metadata=metadata,
         )
         return 1
 
@@ -155,7 +195,7 @@ class MediaIngestionService:
 
         return None
 
-    def _download_media(self, url: str, output_dir: Path) -> tuple[Path, Path | None]:
+    def _download_media(self, url: str, output_dir: Path) -> tuple[Path, Path | None, dict[str, Any]]:
         # Meta's messaging webhook only ever gives us the post's permalink,
         # not a direct video file (confirmed by inspecting a real payload —
         # downloading that URL directly returns the Instagram webpage, not
@@ -187,4 +227,4 @@ class MediaIngestionService:
                 logger.exception("Failed to download Instagram's cover image; falling back to a captured frame.")
                 thumbnail_path = None
 
-        return video_path, thumbnail_path
+        return video_path, thumbnail_path, extract_post_metadata(info)
