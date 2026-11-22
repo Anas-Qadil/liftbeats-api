@@ -64,6 +64,9 @@ class MediaIngestionService:
         self.connection = connection
         self.storage_service = storage_service
         self.settings = get_settings()
+        # Reels created by this run that have a video to transcribe. The webhook
+        # route schedules the transcription after the response is sent.
+        self.reels_to_transcribe: list[int] = []
 
     def process_instagram_webhook(self, payload: dict) -> int:
         processed_count = 0
@@ -147,7 +150,7 @@ class MediaIngestionService:
             # rather than losing track of the share entirely.
             logger.exception("Failed to download Instagram media; saving source_url for retry.")
 
-        reels.create_reel(
+        reel = reels.create_reel(
             self.connection,
             user_id=str(linked_account["user_id"]),
             folder_id=None,
@@ -160,6 +163,8 @@ class MediaIngestionService:
             external_message_id=external_message_id,
             metadata=metadata,
         )
+        if video_url:
+            self.reels_to_transcribe.append(reel["id"])
         return 1
 
     def _try_consume_link_code(self, sender_id: str, text: str) -> bool:

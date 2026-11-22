@@ -5,7 +5,7 @@ import hmac
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import PlainTextResponse
 
 from app.api.deps import get_db_connection
@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.db import PoolConnection
 from app.services.media_ingestion import MediaIngestionService
 from app.services.storage import get_storage_service
+from app.services.transcription import transcribe_reel
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ def verify_instagram_webhook(
 @router.post("/instagram")
 async def receive_instagram_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     connection: PoolConnection = Depends(get_db_connection),
 ) -> Response:
     settings = get_settings()
@@ -46,8 +48,15 @@ async def receive_instagram_webhook(
     logger.info("Instagram webhook payload: %s", json.dumps(payload))
     storage_service = get_storage_service()
 
+    service = MediaIngestionService(connection, storage_service)
     with connection.transaction():
-        processed = MediaIngestionService(connection, storage_service).process_instagram_webhook(payload)
+        processed = service.process_instagram_webhook(payload)
+
+    # After the response: Meta expects a quick 200, and a transcription takes seconds to
+    # minutes. Each task opens its own pooled connection; a failure leaves transcribed_at
+    # NULL so scripts/backfill_transcripts.py picks the reel up later.
+    for reel_id in service.reels_to_transcribe:
+        background_tasks.add_task(transcribe_reel, reel_id)
 
     return Response(
         content=json.dumps({"status": "accepted", "processed": processed}),

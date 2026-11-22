@@ -23,6 +23,9 @@ REEL_FIELDS = """
     comment_count,
     width,
     height,
+    transcript,
+    transcript_language,
+    transcribed_at,
     synced_at,
     created_at
 """
@@ -69,6 +72,13 @@ def get_reel_by_id(
             """,
             (reel_id, user_id),
         )
+        return cursor.fetchone()
+
+
+def get_reel(connection: PoolConnection, reel_id: int) -> dict[str, Any] | None:
+    """Any user's reel by id; for background work that has no request user."""
+    with connection.cursor() as cursor:
+        cursor.execute(f"SELECT {REEL_FIELDS} FROM {SCHEMA}.reels WHERE id = %s", (reel_id,))
         return cursor.fetchone()
 
 
@@ -269,3 +279,42 @@ def update_reel_metadata(
             (*(metadata.get(field) for field in METADATA_FIELDS), caption, reel_id),
         )
         return cursor.fetchone()
+
+
+def set_reel_transcript(
+    connection: PoolConnection,
+    *,
+    reel_id: int,
+    transcript: str | None,
+    language: str | None,
+) -> dict[str, Any] | None:
+    """Records a transcription attempt. transcript stays NULL for reels with no speech;
+    transcribed_at is set either way so the backfill does not retry them forever."""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            UPDATE {SCHEMA}.reels
+            SET transcript = %s, transcript_language = %s, transcribed_at = NOW()
+            WHERE id = %s
+            RETURNING {REEL_FIELDS}
+            """,
+            (transcript, language, reel_id),
+        )
+        return cursor.fetchone()
+
+
+def list_reels_missing_transcript(connection: PoolConnection, *, limit: int | None = None) -> list[dict[str, Any]]:
+    """Reels with a stored video that were never transcribed, for the backfill."""
+    query = f"""
+        SELECT {REEL_FIELDS}
+        FROM {SCHEMA}.reels
+        WHERE transcribed_at IS NULL AND local_video_path IS NOT NULL
+        ORDER BY created_at DESC, id DESC
+    """
+    params: tuple[Any, ...] = ()
+    if limit is not None:
+        query += " LIMIT %s"
+        params = (limit,)
+    with connection.cursor() as cursor:
+        cursor.execute(query, params)
+        return cursor.fetchall()

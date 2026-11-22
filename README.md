@@ -159,6 +159,18 @@ If you configure the Meta app for Instagram linking, register that exact callbac
 - `GET /api/v1/webhooks/instagram`
 - `POST /api/v1/webhooks/instagram`
 
+## Transcription
+
+Saved reels are transcribed by the Anscue AI hub (`anscue-ai` repo, `https://api.anscue.com`).
+After the Instagram webhook response is sent, a background task posts the reel's video URL (or the
+file bytes, with the local storage backend) plus a vocabulary hint built from the creator handle and
+caption to the hub, and stores `transcript`, `transcript_language` and `transcribed_at` on the reel.
+Clients get them on every reel response.
+
+- Setting: `ANSCUE_AI_API_KEY` (empty disables transcription). The hub URL is fixed in `app/services/transcription.py`.
+- Migration: `scripts/2026-11-22_reel_transcript.sql`.
+- Old reels and failed attempts: `venv/bin/python -m scripts.backfill_transcripts [--limit N] [--dry-run]`.
+
 ## CI/CD
 
 The repo now includes a GitHub Actions workflow at [`.github/workflows/CI.yaml`](/Users/anasqadil/liftbeats-api/.github/workflows/CI.yaml) that:

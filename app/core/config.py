@@ -64,6 +64,11 @@ class Settings(BaseSettings):
 
     request_timeout_seconds: int = 30
 
+    # Anscue AI hub (anscue-ai repo, https://api.anscue.com). Empty key disables transcription.
+    anscue_ai_api_key: str = ""
+    # Transcription is synchronous on the hub side; a long clip on CPU can take minutes.
+    anscue_ai_timeout_seconds: int = 600
+
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def parse_csv_or_json_list(cls, value: object) -> object:

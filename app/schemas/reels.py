@@ -25,6 +25,9 @@ class ReelRead(BaseModel):
     comment_count: int | None = None
     width: int | None = None
     height: int | None = None
+    transcript: str | None = None
+    transcript_language: str | None = None
+    transcribed_at: datetime | None = None
     synced_at: datetime
     created_at: datetime
 
