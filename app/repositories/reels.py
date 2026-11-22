@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from psycopg.types.json import Jsonb
+
 from app.db import PoolConnection
 
 SCHEMA = "liftbeats"
@@ -23,14 +25,16 @@ REEL_FIELDS = """
     comment_count,
     width,
     height,
+    duration_seconds,
     transcript,
     transcript_language,
+    transcript_segments,
     transcribed_at,
     synced_at,
     created_at
 """
 
-METADATA_FIELDS = ("author_username", "author_name", "posted_at", "like_count", "comment_count", "width", "height")
+METADATA_FIELDS = ("author_username", "author_name", "posted_at", "like_count", "comment_count", "width", "height", "duration_seconds")
 
 
 def list_reels(
@@ -150,9 +154,10 @@ def create_reel(
                 like_count,
                 comment_count,
                 width,
-                height
+                height,
+                duration_seconds
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING {REEL_FIELDS}
             """,
             (
@@ -272,6 +277,7 @@ def update_reel_metadata(
                 comment_count = %s,
                 width = %s,
                 height = %s,
+                duration_seconds = %s,
                 caption = COALESCE(caption, %s)
             WHERE id = %s
             RETURNING {REEL_FIELDS}
@@ -287,6 +293,7 @@ def set_reel_transcript(
     reel_id: int,
     transcript: str | None,
     language: str | None,
+    segments: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """Records a transcription attempt. transcript stays NULL for reels with no speech;
     transcribed_at is set either way so the backfill does not retry them forever."""
@@ -294,21 +301,30 @@ def set_reel_transcript(
         cursor.execute(
             f"""
             UPDATE {SCHEMA}.reels
-            SET transcript = %s, transcript_language = %s, transcribed_at = NOW()
+            SET transcript = %s, transcript_language = %s, transcript_segments = %s, transcribed_at = NOW()
             WHERE id = %s
             RETURNING {REEL_FIELDS}
             """,
-            (transcript, language, reel_id),
+            (transcript, language, Jsonb(segments) if segments else None, reel_id),
         )
         return cursor.fetchone()
 
 
-def list_reels_missing_transcript(connection: PoolConnection, *, limit: int | None = None) -> list[dict[str, Any]]:
-    """Reels with a stored video that were never transcribed, for the backfill."""
+def list_reels_missing_transcript(
+    connection: PoolConnection,
+    *,
+    limit: int | None = None,
+    missing_segments: bool = False,
+) -> list[dict[str, Any]]:
+    """Reels with a stored video that were never transcribed, for the backfill. With
+    missing_segments, also reels transcribed before segments were kept (text but no segments)."""
+    where = "transcribed_at IS NULL"
+    if missing_segments:
+        where = f"({where} OR (transcript IS NOT NULL AND transcript_segments IS NULL))"
     query = f"""
         SELECT {REEL_FIELDS}
         FROM {SCHEMA}.reels
-        WHERE transcribed_at IS NULL AND local_video_path IS NOT NULL
+        WHERE {where} AND local_video_path IS NOT NULL
         ORDER BY created_at DESC, id DESC
     """
     params: tuple[Any, ...] = ()

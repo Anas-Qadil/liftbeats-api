@@ -33,6 +33,12 @@ def extract_post_metadata(info: dict[str, Any]) -> dict[str, Any]:
         except (TypeError, ValueError):
             return None
 
+    def as_float(value: Any) -> float | None:
+        try:
+            return round(float(value), 3) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
     timestamp = info.get("timestamp")
     posted_at = datetime.fromtimestamp(timestamp, tz=UTC) if isinstance(timestamp, (int, float)) else None
     description = (info.get("description") or "").strip() or None
@@ -44,6 +50,7 @@ def extract_post_metadata(info: dict[str, Any]) -> dict[str, Any]:
         "comment_count": as_int(info.get("comment_count")),
         "width": as_int(info.get("width")),
         "height": as_int(info.get("height")),
+        "duration_seconds": as_float(info.get("duration")),
         "caption": description,
     }
 

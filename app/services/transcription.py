@@ -95,7 +95,12 @@ def transcribe_media(video_url: str, *, prompt: str | None = None) -> dict[str, 
         raise TranscriptionError(f"hub unreachable: {exc}") from exc
 
     data = response.json()
-    return {"text": (data.get("text") or "").strip() or None, "language": data.get("language")}
+    segments = [
+        {"start": round(float(s["start"]), 2), "end": round(float(s["end"]), 2), "text": str(s["text"]).strip()}
+        for s in data.get("segments") or []
+        if str(s.get("text", "")).strip()
+    ]
+    return {"text": (data.get("text") or "").strip() or None, "language": data.get("language"), "segments": segments}
 
 
 def transcribe_reel(reel_id: int) -> bool:
@@ -115,6 +120,7 @@ def transcribe_reel(reel_id: int) -> bool:
                 reel_id=reel_id,
                 transcript=result["text"],
                 language=result["language"],
+                segments=result["segments"],
             )
         logger.info("transcribed reel %s (%s, %d chars)", reel_id, result["language"], len(result["text"] or ""))
         return True

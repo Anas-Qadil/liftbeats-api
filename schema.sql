@@ -87,11 +87,14 @@ CREATE TABLE IF NOT EXISTS liftbeats.reels (
     comment_count INTEGER,
     width INTEGER,
     height INTEGER,
+    duration_seconds NUMERIC,
     -- Speech transcript from the Anscue AI hub (see services/transcription.py).
     -- Filled after the webhook response by a background task; NULL until then
     -- and for reels with no speech. transcribed_at marks the attempt as done.
     transcript TEXT,
     transcript_language VARCHAR(8),
+    -- [{"start": 0.0, "end": 2.8, "text": "..."}] from the hub; what the UI seeks and highlights with.
+    transcript_segments JSONB,
     transcribed_at TIMESTAMPTZ,
     -- Bumped whenever local_video_path's target file actually changes (see
     -- set_reel_media) — clients cache the video locally and compare this

@@ -6,6 +6,12 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 
+class TranscriptSegment(BaseModel):
+    start: float
+    end: float
+    text: str
+
+
 class ReelRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -25,8 +31,10 @@ class ReelRead(BaseModel):
     comment_count: int | None = None
     width: int | None = None
     height: int | None = None
+    duration_seconds: float | None = None
     transcript: str | None = None
     transcript_language: str | None = None
+    transcript_segments: list[TranscriptSegment] | None = None
     transcribed_at: datetime | None = None
     synced_at: datetime
     created_at: datetime
